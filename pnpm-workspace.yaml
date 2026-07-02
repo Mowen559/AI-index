@@ -1,0 +1,11 @@
+packages:
+  - "hub-web"
+  - "Understand-Anything/understand-anything-plugin"
+  - "Understand-Anything/understand-anything-plugin/packages/*"
+  - "GitNexus/gitnexus"
+  - "GitNexus/gitnexus-web"
+  - "codebase-memory-mcp"
+  - "codebase-memory-mcp/graph-ui"
+  - "codegraph"
+  - "supermemory/apps/*"
+  - "supermemory/packages/*"

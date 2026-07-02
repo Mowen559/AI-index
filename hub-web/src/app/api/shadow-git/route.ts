@@ -33,6 +33,10 @@ export async function GET() {
       const status = line.substring(0, 2);
       const filePath = line.substring(3).trim();
       
+      if (status === '??') {
+        continue; // Skip untracked files for shadow git diff for now
+      }
+
       try {
         // Fetch diff for this file
         // For new files (??), we might need `git diff --no-index /dev/null file` or just read the file.

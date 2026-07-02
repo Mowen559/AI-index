@@ -51,7 +51,7 @@ export function ShadowGitDiffViewer() {
     <div className="absolute bottom-0 left-0 w-full h-[45vh] bg-surface/95 border-t border-border-default backdrop-blur-xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-slide-in flex flex-col z-50">
       <div className="flex justify-between items-center p-3 border-b border-border-subtle bg-elevated/50">
         <div className="flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-text-primary">GitNexus: Shadow Git Diff</h3>
+          <h3 className="text-sm font-semibold text-text-primary">GitNexus: Shadow Git Diff!</h3>
           <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-accent-purple/20 text-accent-purple border border-accent-purple/30">
             Uncommitted AI Edits
           </span>
