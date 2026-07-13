@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { FileDiffViewer } from "./FileDiffViewer";
 
 interface ShadowGitFile {
@@ -14,11 +15,13 @@ export function ShadowGitDiffViewer() {
   const [files, setFiles] = useState<ShadowGitFile[]>([]);
   const [activeFile, setActiveFile] = useState<ShadowGitFile | null>(null);
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const projectPath = searchParams.get('project') || '';
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      fetch('/api/shadow-git')
+      fetch(`/api/shadow-git?project=${encodeURIComponent(projectPath)}`)
         .then(res => res.json())
         .then(data => {
           if (data.files) {
@@ -31,7 +34,7 @@ export function ShadowGitDiffViewer() {
         .catch(err => console.error("Failed to load shadow git status", err))
         .finally(() => setLoading(false));
     }
-  }, [isOpen]);
+  }, [isOpen, projectPath]);
 
   if (!isOpen) {
     return (

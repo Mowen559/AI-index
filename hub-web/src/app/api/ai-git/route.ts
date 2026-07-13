@@ -31,6 +31,7 @@ function getShadowDb(projectPath: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const projectPath = searchParams.get('project') || undefined;
   const project = searchParams.get("project");
   const filePath = searchParams.get("filePath");
   const action = searchParams.get("action"); // 'history' | 'diff'

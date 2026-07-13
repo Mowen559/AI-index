@@ -1,35 +1,13 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
+import { getGitNexusRepoRoot } from '@/lib/runtime-config';
 
-const execAsync = promisify(exec);
 
-const PROJECT_ROOT = path.resolve(process.cwd(), '../'); 
-const SHADOW_GIT_DIR = path.join(PROJECT_ROOT, '.shadow-git');
-
-// Helper to parse git log output (without -p)
-function parseGitLog(output: string) {
-  const commits = [];
-  const lines = output.split('\n');
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    
-    const parts = line.split('|');
-    if (parts.length >= 3) {
-      commits.push({
-        hash: parts[0],
-        message: parts[1],
-        date: parts[2]
-      });
-    }
-  }
-  return commits;
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const projectPath = searchParams.get('project') || undefined;
+  const PROJECT_ROOT = getGitNexusRepoRoot(projectPath);
   const filePath = searchParams.get('filePath');
 
   if (!filePath) {
@@ -37,25 +15,25 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 1. Fetch Shadow Git history for the file
-    let shadowCommits = [];
+    let shadowCommits: any[] = [];
     try {
-      // Fetch all commits for the file in shadow git
-      const cmd = `git --git-dir="${SHADOW_GIT_DIR}" --work-tree="${PROJECT_ROOT}" log --format="%H|%s|%aI" -- "${filePath}"`;
-      const { stdout } = await execAsync(cmd);
-      shadowCommits = parseGitLog(stdout);
+      const { getShadowFileHistory } = await import('gitnexus/dist/server/shadow-git.js');
+      shadowCommits = await getShadowFileHistory(PROJECT_ROOT, filePath, 10);
     } catch (e: any) {
       console.warn("Shadow git error for", filePath, e.message);
     }
 
-    // 2. Fetch Local Repo history for the file
-    let localCommits = [];
+    // 2. Fetch Local Repo history for the file natively using gitnexus
+    let localCommits: any[] = [];
     try {
-      const cmd = `git --git-dir="${path.join(PROJECT_ROOT, '.git')}" --work-tree="${PROJECT_ROOT}" log -n 10 --format="%H|%s|%aI" -- "${filePath}"`;
-      const { stdout } = await execAsync(cmd);
-      localCommits = parseGitLog(stdout);
+      // Import dynamically to avoid top-level issues if the package is missing during early build
+      const { getFileHistory } = await import('gitnexus/dist/server/git-history.js');
+      localCommits = await getFileHistory(PROJECT_ROOT, filePath, 10);
+      
+      // format dates if needed, but gitnexus returns { hash, author, email, date, message }.
+      // The frontend currently expects { hash, message, date } which matches!
     } catch (e: any) {
-      console.warn("Local git error for", filePath, e.message);
+      console.warn("Local git (GitNexus) error for", filePath, e.message);
     }
 
     return NextResponse.json({

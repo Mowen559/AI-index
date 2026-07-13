@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { FileDiffViewer } from "./FileDiffViewer";
 
 interface CodebaseAnalysisPanelProps {
   selectedFile: string | null;
   onClose: () => void;
+  onOpenMergeView?: () => void;
 }
 
 interface CodeNode {
@@ -35,14 +37,21 @@ interface AnalysisData {
   nodes: CodeNode[];
   incomingEdges: Edge[];
   outgoingEdges: Edge[];
+  llmMetadata?: {
+    summary: string;
+    tags: string[];
+    complexity: string;
+  };
 }
 
-export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysisPanelProps) {
+export function CodebaseAnalysisPanel({ selectedFile, onClose, onOpenMergeView }: CodebaseAnalysisPanelProps) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AnalysisData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const projectPath = searchParams.get('project') || '';
 
-  const [activeTab, setActiveTab] = useState<'ast' | 'git'>('ast');
+  const [activeTab, setActiveTab] = useState<'ast' | 'git' | 'ai'>('ai');
   const [gitHistory, setGitHistory] = useState<{ shadow: any[], local: any[] } | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitError, setGitError] = useState<string | null>(null);
@@ -54,9 +63,9 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
   
   const handleCommitSelect = (hash: string, repo: string, date: string) => {
     setSelectedCommits(prev => {
-      const exists = prev.find(c => c.hash === hash);
+      const exists = prev.find(c => c.hash === hash && c.repo === repo);
       if (exists) {
-        return prev.filter(c => c.hash !== hash);
+        return prev.filter(c => !(c.hash === hash && c.repo === repo));
       }
       if (prev.length >= 2) {
         return [prev[1], { hash, repo, date }]; // Keep max 2
@@ -73,14 +82,14 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
       let url = '';
       if (selectedCommits.length === 1) {
         // Diff against parent/local head
-        url = `/api/git-diff?filePath=${encodeURIComponent(selectedFile)}&targetHash=${selectedCommits[0].hash}&repo=${selectedCommits[0].repo}`;
+        url = `/api/git-diff?filePath=${encodeURIComponent(selectedFile)}&targetHash=${selectedCommits[0].hash}&repo=${selectedCommits[0].repo}&project=${encodeURIComponent(projectPath)}`;
       } else {
         // Diff two commits. Chronological order.
         const sorted = [...selectedCommits].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         // We use the repo of the targetHash (the newer one) for context, but technically they might be in different repos.
         // Wait, if they are in different repos, git diff won't work easily unless they share history. Shadow git and local git do NOT share history! 
         // We will just assume diff works best within the same repo.
-        url = `/api/git-diff?filePath=${encodeURIComponent(selectedFile)}&baseHash=${sorted[0].hash}&targetHash=${sorted[1].hash}&repo=${sorted[1].repo}`;
+        url = `/api/git-diff?filePath=${encodeURIComponent(selectedFile)}&baseHash=${sorted[0].hash}&targetHash=${sorted[1].hash}&repo=${sorted[1].repo}&project=${encodeURIComponent(projectPath)}`;
       }
       
       const res = await fetch(url);
@@ -103,7 +112,7 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
       const res = await fetch('/api/git-restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath: selectedFile, hash, repo })
+        body: JSON.stringify({ filePath: selectedFile, hash, repo, project: projectPath })
       });
       const data = await res.json();
       if (data.success) {
@@ -135,7 +144,7 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
     setGitError(null);
 
     // Fetch AST Data
-    fetch(`/api/analyze-file?filePath=${encodeURIComponent(selectedFile)}`)
+    fetch(`/api/analyze-file?filePath=${encodeURIComponent(selectedFile)}&project=${encodeURIComponent(projectPath)}`)
       .then(res => res.json())
       .then(json => {
         if (json.error) throw new Error(json.error);
@@ -149,7 +158,7 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
       });
 
     // Fetch Git History Data
-    fetch(`/api/file-git-history?filePath=${encodeURIComponent(selectedFile)}`)
+    fetch(`/api/file-git-history?filePath=${encodeURIComponent(selectedFile)}&project=${encodeURIComponent(projectPath)}`)
       .then(res => res.json())
       .then(json => {
         if (json.error) throw new Error(json.error);
@@ -163,9 +172,23 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
       });
 
     return () => { isMounted = false; };
-  }, [selectedFile]);
+  }, [selectedFile, projectPath]);
 
   if (!selectedFile) return <div className="hidden" />;
+
+  const formatDisplayName = (name: string) => {
+    let cleanName = name;
+    if (cleanName.length > 20 && cleanName.includes('.')) {
+      const parts = cleanName.split('.');
+      let lastPart = parts[parts.length - 1];
+      if (lastPart.startsWith('__') && lastPart.endsWith('__') && parts.length > 1) {
+        lastPart = parts[parts.length - 2];
+      }
+      cleanName = lastPart;
+    }
+    return cleanName.split(/[/\\]/).pop() || cleanName;
+  };
+
   return (
     <div className="w-[450px] h-full bg-surface border-l border-border-default p-4 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)] animate-slide-in">
       <div className="flex justify-between items-center mb-6 shrink-0">
@@ -176,32 +199,40 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
       </div>
       
       <div className="text-[11px] font-mono text-accent-purple bg-accent-purple/10 border border-accent-purple/30 p-2 rounded mb-4 break-all shrink-0">
-        {selectedFile}
+        {formatDisplayName(selectedFile)}
       </div>
 
-      <div className="flex gap-2 border-b border-border-subtle mb-4 shrink-0">
+      <div className="flex gap-4 border-b border-white/10 mb-4 shrink-0 px-2 pb-0">
         <button 
-          onClick={() => setActiveTab('ast')}
-          className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === 'ast' ? 'text-primary border-b-2 border-primary' : 'text-text-muted hover:text-text-primary'}`}
+          onClick={() => setActiveTab('ai')}
+          className={`pb-2 px-4 text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === 'ai' ? 'text-accent-teal border-b-2 border-accent-teal' : 'text-text-muted hover:text-text-primary'}`}
         >
-          AST Analysis
+          信息
         </button>
         <button 
           onClick={() => setActiveTab('git')}
-          className={`pb-2 px-2 text-sm font-medium transition-colors ${activeTab === 'git' ? 'text-primary border-b-2 border-primary' : 'text-text-muted hover:text-text-primary'}`}
+          className={`pb-2 px-4 text-sm font-semibold transition-colors whitespace-nowrap ${activeTab === 'git' ? 'text-accent-teal border-b-2 border-accent-teal' : 'text-text-muted hover:text-text-primary'}`}
         >
-          Git History
+          文件
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-        {/* AST TAB CONTENT */}
-        {activeTab === 'ast' && (
-          <>
-            {loading && (
+                {/* INFO TAB CONTENT */}
+        {activeTab === 'ai' && (
+          <div className="space-y-6 pb-6 pr-2 relative">
+            {loading && !data && (
               <div className="text-sm text-text-muted animate-pulse py-4 text-center">
-                Querying CodeGraph index...
+                Querying Knowledge Graph...
               </div>
+            )}
+            
+            {loading && data && (
+               <div className="absolute inset-0 bg-surface/50 backdrop-blur-[2px] z-10 flex items-center justify-center">
+                 <div className="px-4 py-2 bg-elevated border border-border-default rounded-full text-xs text-text-primary animate-pulse shadow-lg">
+                   Loading new file...
+                 </div>
+               </div>
             )}
 
             {error && (
@@ -210,111 +241,167 @@ export function CodebaseAnalysisPanel({ selectedFile, onClose }: CodebaseAnalysi
               </div>
             )}
 
-        {!loading && !error && data && (
-          <div className="space-y-6">
-            
-            {/* Summary Section */}
-            <div className="flex gap-2 text-xs">
-              <div className="flex-1 p-2 bg-elevated rounded border border-border-subtle flex flex-col items-center">
-                <span className="text-text-primary font-bold text-base">{data.nodes.length}</span>
-                <span className="text-text-muted uppercase text-[10px]">Symbols</span>
-              </div>
-              <div className="flex-1 p-2 bg-elevated rounded border border-border-subtle flex flex-col items-center">
-                <span className="text-text-primary font-bold text-base">{data.incomingEdges.length}</span>
-                <span className="text-text-muted uppercase text-[10px]">Callers</span>
-              </div>
-              <div className="flex-1 p-2 bg-elevated rounded border border-border-subtle flex flex-col items-center">
-                <span className="text-text-primary font-bold text-base">{data.outgoingEdges.length}</span>
-                <span className="text-text-muted uppercase text-[10px]">Deps</span>
-              </div>
-            </div>
+            {!error && data && (
+              <div className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                
+                {/* Title */}
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-blue-400 border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 rounded uppercase">FILE</span>
+                    {data.llmMetadata?.complexity && (
+                      <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${
+                        data.llmMetadata.complexity === 'complex' ? 'bg-[#c97070]/10 text-[#c97070] border-[#c97070]/30' :
+                        data.llmMetadata.complexity === 'moderate' ? 'bg-accent-dim/10 text-accent-dim border-accent-dim/30' :
+                        'bg-green-500/10 text-green-400 border-green-500/30'
+                      }`}>
+                        {data.llmMetadata.complexity}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            {/* AST Nodes */}
-            <div>
-              <h4 className="text-[11px] font-semibold text-text-secondary mb-3 uppercase tracking-wider">Symbols & AST</h4>
-              {data.nodes.length === 0 ? (
-                <div className="text-xs text-text-muted italic">No symbols indexed in this file.</div>
-              ) : (
-                <div className="space-y-3">
-                  {data.nodes.map(node => (
-                    <div key={node.id} className="p-3 bg-elevated border border-border-subtle rounded text-left group">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-sm text-text-primary font-mono truncate mr-2" title={node.name}>
-                          {node.name}
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-white font-serif tracking-wide" title={data.file || selectedFile}>
+                    {formatDisplayName(data.file || selectedFile)}
+                  </h2>
+                  <button className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-xs text-text-muted transition-colors">
+                    聚焦
+                  </button>
+                </div>
+
+                {/* Summary */}
+                {data.llmMetadata?.summary && (
+                  <p className="text-[13px] text-text-secondary leading-relaxed">
+                    {data.llmMetadata.summary}
+                  </p>
+                )}
+
+                {/* File Path Block */}
+                <div className="bg-elevated border border-white/10 rounded-lg p-3 flex justify-between items-center">
+                  <div className="overflow-hidden pr-2">
+                    <div className="text-[10px] text-text-muted mb-1">文件</div>
+                    <div className="text-[11px] text-text-secondary truncate" title={data.file || selectedFile}>{data.file || selectedFile}</div>
+                  </div>
+                  <button className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-xs text-text-muted transition-colors whitespace-nowrap">
+                    打开代码
+                  </button>
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <h4 className="text-[11px] font-bold text-accent-orange mb-2">标签</h4>
+                  {data.llmMetadata?.tags && data.llmMetadata.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {data.llmMetadata.tags.map((tag: string, idx: number) => (
+                        <span key={idx} className="text-[11px] px-2.5 py-1 bg-white/5 border border-white/10 rounded-full text-text-secondary">
+                          {tag}
                         </span>
-                        <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 shrink-0">
-                          {node.kind}
-                        </span>
-                      </div>
-                      {node.signature && (
-                        <div className="text-[10px] text-text-muted font-mono mt-1 break-all line-clamp-2">
-                          {node.signature}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-text-muted italic">暂无标签</div>
+                  )}
+                </div>
+
+                {/* Defined in this file */}
+                <div>
+                  <h4 className="text-[11px] font-bold text-white mb-2 flex items-center gap-2">
+                    在此文件中定义 ({data.nodes?.length || 0})
+                  </h4>
+                  {data.nodes && data.nodes.length > 0 ? (
+                    <div className="space-y-2">
+                      {data.nodes.slice(0, 10).map((node: any) => (
+                        <div key={node.id} className="bg-elevated border border-white/10 rounded-lg p-2.5 flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded border shrink-0 ${
+                                node.kind === 'function' || node.kind === 'method' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                                node.kind === 'class' || node.kind === 'interface' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                                'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                              }`}>
+                                {node.kind}
+                              </span>
+                              <span className="text-sm font-semibold text-white truncate" title={node.name}>{node.name}</span>
+                            </div>
+                          </div>
+                          {node.docstring && (
+                            <div className="text-[11px] text-text-muted truncate">{node.docstring.split('\\n')[0]}</div>
+                          )}
                         </div>
+                      ))}
+                      {data.nodes.length > 10 && (
+                        <div className="text-[10px] text-text-muted text-center pt-1">+ {data.nodes.length - 10} more</div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Incoming Edges (Who depends on this) */}
-            <div>
-              <h4 className="text-[11px] font-semibold text-text-secondary mb-3 uppercase tracking-wider">Who calls this? (Incoming)</h4>
-              {data.incomingEdges.length === 0 ? (
-                <div className="text-xs text-text-muted italic">No incoming calls/imports found.</div>
-              ) : (
-                <div className="space-y-2">
-                  {data.incomingEdges.slice(0, 10).map((edge, idx) => (
-                    <div key={idx} className="p-2 text-xs bg-void/50 border border-border-subtle rounded flex justify-between items-center gap-2">
-                      <div className="truncate flex-1">
-                        <span className="text-accent-teal font-mono">{edge.source_name}</span>
-                        <div className="text-[9px] text-text-muted truncate">{edge.source_file}</div>
-                      </div>
-                      <span className="text-[9px] bg-accent-teal/10 text-accent-teal px-1 rounded uppercase">
-                        {edge.kind}
-                      </span>
-                    </div>
-                  ))}
-                  {data.incomingEdges.length > 10 && (
-                    <div className="text-[10px] text-text-muted text-center pt-1">+ {data.incomingEdges.length - 10} more</div>
+                  ) : (
+                    <div className="text-xs text-text-muted italic">暂无符号</div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Outgoing Edges (What this depends on) */}
-            <div>
-              <h4 className="text-[11px] font-semibold text-text-secondary mb-3 uppercase tracking-wider">What does it call? (Outgoing)</h4>
-              {data.outgoingEdges.length === 0 ? (
-                <div className="text-xs text-text-muted italic">No outgoing dependencies found.</div>
-              ) : (
-                <div className="space-y-2">
-                  {data.outgoingEdges.slice(0, 10).map((edge, idx) => (
-                    <div key={idx} className="p-2 text-xs bg-void/50 border border-border-subtle rounded flex justify-between items-center gap-2">
-                      <div className="truncate flex-1">
-                        <span className="text-primary font-mono">{edge.target_name}</span>
-                        <div className="text-[9px] text-text-muted truncate">{edge.target_file}</div>
-                      </div>
-                      <span className="text-[9px] bg-primary/10 text-primary px-1 rounded uppercase">
-                        {edge.kind}
-                      </span>
+                {/* Connections */}
+                <div>
+                  <h4 className="text-[11px] font-bold text-white mb-2">
+                    连接 ({(data.incomingEdges?.length || 0) + (data.outgoingEdges?.length || 0)})
+                  </h4>
+                  {(data.incomingEdges?.length > 0 || data.outgoingEdges?.length > 0) ? (
+                    <div className="space-y-2">
+                      {data.incomingEdges?.slice(0, 5).map((edge: any, i: number) => {
+                        const kindMap: Record<string, string> = {
+                          'calls': '被调用',
+                          'imports': '被导入',
+                          'contains': '属于',
+                          'implements': '被实现',
+                          'instantiates': '被实例化'
+                        };
+                        const label = kindMap[edge.kind?.toLowerCase()] || `被 ${edge.kind}`;
+                        return (
+                          <div key={'in'+i} className="bg-elevated border border-white/10 rounded-lg p-2.5 flex items-center gap-2 text-[11px]">
+                            <span className="text-text-muted shrink-0">←</span>
+                            <span className="text-text-muted shrink-0">{label}</span>
+                            <span className="font-semibold text-text-primary truncate" title={edge.source_name || edge.source}>{edge.source_name || edge.source.split(/[./\\]/).pop()}</span>
+                          </div>
+                        );
+                      })}
+                      {data.outgoingEdges?.slice(0, 5).map((edge: any, i: number) => {
+                        const kindMap: Record<string, string> = {
+                          'calls': '调用',
+                          'imports': '导入',
+                          'contains': '包含',
+                          'implements': '实现',
+                          'instantiates': '实例化'
+                        };
+                        const label = kindMap[edge.kind?.toLowerCase()] || edge.kind;
+                        return (
+                          <div key={'out'+i} className="bg-elevated border border-white/10 rounded-lg p-2.5 flex items-center gap-2 text-[11px]">
+                            <span className="text-text-muted shrink-0">→</span>
+                            <span className="text-text-muted shrink-0">{label}</span>
+                            <span className="font-semibold text-text-primary truncate" title={edge.target_name || edge.target}>{edge.target_name || edge.target.split(/[./\\]/).pop()}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                  {data.outgoingEdges.length > 10 && (
-                    <div className="text-[10px] text-text-muted text-center pt-1">+ {data.outgoingEdges.length - 10} more</div>
+                  ) : (
+                    <div className="text-xs text-text-muted italic">暂无连接</div>
                   )}
                 </div>
-              )}
-            </div>
-            
+              </div>
+            )}
           </div>
-        )}
-        </>
         )}
 
         {/* GIT HISTORY TAB CONTENT */}
         {activeTab === 'git' && (
           <div className="space-y-6 pb-6">
+            <div className="flex justify-end pt-2 pr-2">
+              <button 
+                onClick={onOpenMergeView}
+                className="px-3 py-1.5 bg-accent-teal/20 text-accent-teal hover:bg-accent-teal/30 rounded text-xs font-semibold transition-colors flex items-center gap-2"
+                title="Open fullscreen 3-Way Merge View"
+              >
+                Open Full Merge View ↗
+              </button>
+            </div>
+
             {gitLoading && (
               <div className="text-sm text-text-muted animate-pulse py-4 text-center">
                 Fetching Git History...

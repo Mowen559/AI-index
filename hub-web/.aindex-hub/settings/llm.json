@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "provider": "openai-compatible",
+  "baseUrl": "http://127.0.0.1:8045",
+  "apiKey": "sk-3c22e1fdc7ab4dce8cf3c5d2d0c7a18c",
+  "model": "claude-sonnet-4-6",
+  "temperature": 0.2,
+  "maxTokens": 4000,
+  "uaFileLimit": 24,
+  "uaSampleFileLimit": 6,
+  "uaMaxFileChars": 12000,
+  "updatedAt": "2026-07-06T16:32:15.114Z"
+}

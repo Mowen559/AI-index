@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Folder, FolderOpen, File as FileIcon, FileCode, FileText, History, Search, ChevronRight, ChevronDown, Clock } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 export interface FileNode {
   name: string;
@@ -74,15 +75,16 @@ function TreeNode({ node, level, onSelect, selectedPath }: { node: FileNode; lev
 }
 
 export function FileExplorerSidebar({ onFileSelect, history, selectedFile }: FileExplorerSidebarProps) {
-  const [activeTab, setActiveTab] = useState<'files' | 'history'>('files');
   const [treeData, setTreeData] = useState<FileNode[]>([]);
+  const searchParams = useSearchParams();
+  const projectPath = searchParams.get('project') || '';
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const res = await fetch('/api/files');
+        const res = await fetch(`/api/files?project=${encodeURIComponent(projectPath)}`);
         const data = await res.json();
         if (data.tree) {
           setTreeData(data.tree);
@@ -94,85 +96,65 @@ export function FileExplorerSidebar({ onFileSelect, history, selectedFile }: Fil
       }
     };
     fetchFiles();
-  }, []);
+  }, [projectPath]);
 
   return (
     <div className="w-64 h-full bg-surface/80 backdrop-blur-md border-r border-border-default flex flex-col z-30">
-      {/* Tabs */}
       <div className="flex border-b border-border-subtle">
-        <button 
-          className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${activeTab === 'files' ? 'text-primary border-b-2 border-primary' : 'text-text-muted hover:text-text-secondary'}`}
-          onClick={() => setActiveTab('files')}
-        >
+        <div className="flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 text-primary border-b-2 border-primary">
           <Folder size={14} /> Explorer
-        </button>
-        <button 
-          className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${activeTab === 'history' ? 'text-primary border-b-2 border-primary' : 'text-text-muted hover:text-text-secondary'}`}
-          onClick={() => setActiveTab('history')}
-        >
-          <Clock size={14} /> Recent
-        </button>
+        </div>
       </div>
 
-      {activeTab === 'files' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-3">
-            <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-2 text-text-muted" />
-              <input 
-                type="text" 
-                placeholder="Search files..." 
-                className="w-full bg-deep border border-border-subtle rounded-md py-1.5 pl-8 pr-3 text-xs text-text-primary focus:outline-none focus:border-primary/50"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-1 pb-20 custom-scrollbar">
-            {loading ? (
-              <div className="flex items-center justify-center h-20 text-xs text-text-muted animate-pulse">Loading workspace...</div>
-            ) : treeData.length === 0 ? (
-              <div className="text-center text-xs text-text-muted mt-10">No files found</div>
-            ) : (
-              treeData.map((node, idx) => (
-                <TreeNode key={idx} node={node} level={0} onSelect={onFileSelect} selectedPath={selectedFile} />
-              ))
-            )}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-2 text-text-muted" />
+            <input 
+              type="text" 
+              placeholder="Search files..." 
+              className="w-full bg-deep border border-border-subtle rounded-md py-1.5 pl-8 pr-3 text-xs text-text-primary focus:outline-none focus:border-primary/50"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
-      )}
-
-      {activeTab === 'history' && (
-        <div className="flex-1 overflow-y-auto p-2">
-          {history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-text-muted gap-2">
-              <Clock size={20} className="opacity-20" />
-              <span className="text-xs">No files opened yet</span>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-1 pb-20 custom-scrollbar">
+          {loading ? (
+            <div className="flex items-center justify-center h-20 text-xs text-text-muted animate-pulse">Loading workspace...</div>
+          ) : treeData.length === 0 ? (
+            <div className="flex flex-col items-center p-4 text-center text-xs text-text-muted mt-10">
+              <span className="mb-4">No workspace loaded</span>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('recentProject');
+                  window.location.href = '/';
+                }}
+                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-md transition-colors cursor-pointer"
+              >
+                Select Project
+              </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-1">
-              {history.map((path, idx) => {
-                const filename = path.split('/').pop() || path;
-                const isSelected = selectedFile === path;
-                return (
-                  <div 
-                    key={`${path}-${idx}`}
-                    className={`flex items-center gap-2 py-2 px-2 cursor-pointer text-sm rounded select-none ${isSelected ? 'bg-primary/20 text-primary font-medium' : 'hover:bg-surface/50 text-text-secondary hover:text-text-primary'}`}
-                    onClick={() => onFileSelect(path)}
-                    title={path}
-                  >
-                    {getFileIcon(filename)}
-                    <div className="flex flex-col overflow-hidden">
-                      <span className="truncate leading-tight">{filename}</span>
-                      <span className="text-[10px] text-text-muted truncate leading-tight opacity-70">{path}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            treeData.map((node, idx) => (
+              <TreeNode key={idx} node={node} level={0} onSelect={onFileSelect} selectedPath={selectedFile} />
+            ))
           )}
         </div>
-      )}
+        {treeData.length > 0 && (
+          <div className="p-3 border-t border-border-subtle bg-surface/50">
+            <button
+              onClick={() => {
+                localStorage.removeItem('recentProject');
+                window.location.href = '/';
+              }}
+              className="w-full py-2 text-xs font-medium text-text-secondary hover:text-primary hover:bg-primary/10 border border-border-subtle hover:border-primary/30 rounded transition-colors"
+            >
+              Change Project...
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

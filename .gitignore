@@ -16,6 +16,8 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.gradle
+
 .DS_Store
 *.suo
 *.ntvs*
@@ -29,3 +31,25 @@ out
 
 # AIndex Memory
 .aindex_memory
+
+# AI / Agent Memory and Cache
+.ai_history.db
+.codegraph
+.shadow-git
+.supermemory
+.understand-anything
+clouddeepcloudsuper agent
+batches_*.json
+
+# Build Outputs & Large Artifacts
+*.exe
+*.vsix
+*.zip
+*.jar
+deepcloud-bundle/
+vscode-plugin/bundle/
+idea-plugin/build/
+idea-plugin/src/main/resources/bundle.zip
+GitNexus/.gitnexus/
+deploy-test/
+

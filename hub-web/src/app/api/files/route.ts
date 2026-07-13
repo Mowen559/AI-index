@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import path from 'path';
+import { getCodegraphDbPath } from '@/lib/runtime-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +11,18 @@ export interface FileNode {
   language?: string;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const projectPath = url.searchParams.get('project') || undefined;
   try {
+    // @ts-expect-error - node:sqlite is in Node 22.5+
     const { DatabaseSync } = await import('node:sqlite');
-    const dbPath = path.join(process.cwd(), '..', '.codegraph', 'codegraph.db');
+    const dbPath = getCodegraphDbPath(projectPath);
+    
+    if (!require('fs').existsSync(dbPath)) {
+      return NextResponse.json({ tree: [] });
+    }
+    
     const db = new DatabaseSync(dbPath);
 
     // Get all files

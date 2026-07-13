@@ -1,0 +1,11 @@
+const { DatabaseSync } = require('node:sqlite'); 
+const db = new DatabaseSync('../.codegraph/codegraph.db'); 
+console.log(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()); 
+console.log('--- Nodes Schema ---');
+console.log(db.prepare("PRAGMA table_info(nodes)").all());
+console.log('--- Edges Schema ---');
+console.log(db.prepare("PRAGMA table_info(edges)").all());
+console.log('--- Sample Nodes ---');
+console.log(db.prepare("SELECT * FROM nodes LIMIT 5").all());
+console.log('--- Sample Edges ---');
+console.log(db.prepare("SELECT * FROM edges LIMIT 5").all());

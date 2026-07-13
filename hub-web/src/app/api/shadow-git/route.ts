@@ -1,14 +1,11 @@
 import { NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import path from 'path';
+import { getGitNexusRoot, getShadowGitRoot } from '@/lib/runtime-config';
 
 const execAsync = promisify(exec);
-
-// Find the project root (where .shadow-git is expected to be)
-// Assuming hub-web is inside the monorepo root
-const PROJECT_ROOT = path.resolve(process.cwd(), '../'); 
-const SHADOW_GIT_DIR = path.join(PROJECT_ROOT, '.shadow-git');
+const PROJECT_ROOT = getGitNexusRoot();
+const SHADOW_GIT_DIR = getShadowGitRoot();
 
 export async function GET() {
   try {
@@ -41,7 +38,7 @@ export async function GET() {
         // Fetch diff for this file
         // For new files (??), we might need `git diff --no-index /dev/null file` or just read the file.
         // But `git diff` works if it's tracked. We will just attempt `git diff HEAD -- filePath`
-        let diffCmd = `git --git-dir="${SHADOW_GIT_DIR}" --work-tree="${PROJECT_ROOT}" diff HEAD -- "${filePath}"`;
+        const diffCmd = `git --git-dir="${SHADOW_GIT_DIR}" --work-tree="${PROJECT_ROOT}" diff HEAD -- "${filePath}"`;
         
         // If untracked, git diff HEAD doesn't show it usually, unless we add it to index.
         // For simplicity, we just run the diff command.
@@ -64,8 +61,9 @@ export async function GET() {
     }
 
     return NextResponse.json({ files });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to read shadow git';
     console.error('Shadow git error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to read shadow git' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@ const execAsync = promisify(exec);
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const projectPath = searchParams.get('project') || undefined;
   const projectRoot = searchParams.get('project');
   const filePath = searchParams.get('file');
 
