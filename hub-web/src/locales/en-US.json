@@ -1,9 +1,0 @@
-{
-  "system.welcome": "Welcome to DeepCloud",
-  "system.error.internal": "Internal System Error",
-  "system.error.unauthorized": "Unauthorized Access",
-  "home.workspace": "AIndex Hub Workspace",
-  "home.title": "Open project, generate traceable intelligent context",
-  "home.description": "This is the main entry of hub-web: select a local project, pull Git repositories, and trigger the analysis pipelines for Codebase Memory, Understand-Anything, GitNexus, and the reverse engineering engine.",
-  "home.backendStatus": "Backend engine ready"
-}

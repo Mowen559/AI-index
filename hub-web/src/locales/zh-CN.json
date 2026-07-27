@@ -1,9 +1,0 @@
-{
-  "system.welcome": "欢迎来到深云平台",
-  "system.error.internal": "内部系统错误",
-  "system.error.unauthorized": "未授权的访问",
-  "home.workspace": "AIndex Hub 工作空间",
-  "home.title": "打开项目，生成可追溯的代码智能上下文",
-  "home.description": "这里是 hub-web 的主入口：选择本地项目、拉取 Git 仓库，并启动 Codebase Memory、Understand-Anything、GitNexus 与逆向引擎所需的分析链路。",
-  "home.backendStatus": "后端引擎已就绪"
-}
